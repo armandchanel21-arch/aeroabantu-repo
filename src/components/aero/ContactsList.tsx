@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import { Contact } from '@/types/aero';
 import { UserPlus, Trash2, RefreshCw, Shield, ShieldCheck, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface ContactsListProps {
   contacts: Contact[];
-  setContacts: React.Dispatch<React.SetStateAction<Contact[]>>;
+  onAddContact: (contact: Omit<Contact, 'id'>) => Promise<Contact | null>;
+  onUpdateContact: (id: string, updates: Partial<Contact>) => Promise<boolean>;
+  onDeleteContact: (id: string) => Promise<boolean>;
+  loading?: boolean;
 }
 
 interface VerificationEmail {
@@ -16,13 +20,21 @@ interface VerificationEmail {
   sentAt: number;
 }
 
-const ContactsList: React.FC<ContactsListProps> = ({ contacts, setContacts }) => {
+const ContactsList: React.FC<ContactsListProps> = ({ 
+  contacts, 
+  onAddContact, 
+  onUpdateContact, 
+  onDeleteContact,
+  loading 
+}) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [sentEmails, setSentEmails] = useState<VerificationEmail[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
 
   const generateVerificationEmail = (contact: Contact) => {
     const token = Math.random().toString(36).substr(2, 12).toUpperCase();
@@ -37,29 +49,46 @@ const ContactsList: React.FC<ContactsListProps> = ({ contacts, setContacts }) =>
     setSentEmails(prev => [newMail, ...prev].slice(0, 5));
   };
 
-  const addContact = () => {
+  const addContact = async () => {
     if (!newName || !newPhone || !newEmail) return;
-    const newContact: Contact = {
-      id: Math.random().toString(36).substr(2, 9),
+    
+    setSubmitting(true);
+    const newContact = await onAddContact({
       name: newName,
       phone: newPhone,
       email: newEmail,
       isEmergency: true,
       isVerified: false
-    };
-    
-    setContacts([...contacts, newContact]);
-    generateVerificationEmail(newContact);
-    
-    setNewName('');
-    setNewPhone('');
-    setNewEmail('');
-    setIsAdding(false);
+    });
+    setSubmitting(false);
+
+    if (newContact) {
+      generateVerificationEmail(newContact);
+      toast({
+        title: "Contact added",
+        description: "Verification email sent.",
+      });
+      setNewName('');
+      setNewPhone('');
+      setNewEmail('');
+      setIsAdding(false);
+    } else {
+      toast({
+        title: "Error",
+        description: "Failed to add contact.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const removeContact = (id: string) => {
-    setContacts(contacts.filter(c => c.id !== id));
-    setSentEmails(prev => prev.filter(email => email.contactId !== id));
+  const removeContact = async (id: string) => {
+    const success = await onDeleteContact(id);
+    if (success) {
+      setSentEmails(prev => prev.filter(email => email.contactId !== id));
+      toast({
+        title: "Contact removed",
+      });
+    }
   };
 
   const simulateResend = (id: string) => {
@@ -75,12 +104,18 @@ const ContactsList: React.FC<ContactsListProps> = ({ contacts, setContacts }) =>
   };
 
   const handleLinkClick = async (email: VerificationEmail) => {
-    setContacts(prev => prev.map(c => 
-      c.id === email.contactId ? { ...c, isVerified: true } : c
-    ));
+    await onUpdateContact(email.contactId, { isVerified: true });
     setSentEmails(prev => prev.filter(e => e.id !== email.id));
     if (window.navigator.vibrate) window.navigator.vibrate([30, 50, 30]);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -128,54 +163,60 @@ const ContactsList: React.FC<ContactsListProps> = ({ contacts, setContacts }) =>
           </div>
           <button 
             onClick={addContact}
-            disabled={!newName || !newPhone || !newEmail}
+            disabled={!newName || !newPhone || !newEmail || submitting}
             className="w-full bg-primary text-primary-foreground py-3 rounded-2xl font-black shadow-lg disabled:opacity-50"
           >
-            ADD & SEND VERIFICATION
+            {submitting ? 'Adding...' : 'ADD & SEND VERIFICATION'}
           </button>
         </div>
       )}
 
       {/* Contact List */}
       <div className="space-y-3">
-        {contacts.map(contact => (
-          <div key={contact.id} className="bg-card border border-border rounded-2xl p-4 flex items-center gap-4 shadow-sm">
-            <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-primary-foreground font-black text-lg shadow-md">
-              {contact.name[0]}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="font-bold text-foreground truncate">{contact.name}</p>
-                {contact.isVerified ? (
-                  <ShieldCheck className="w-4 h-4 text-success shrink-0" />
-                ) : (
-                  <Shield className="w-4 h-4 text-muted-foreground shrink-0" />
-                )}
+        {contacts.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Shield className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p className="font-medium">No emergency contacts yet</p>
+            <p className="text-sm">Add contacts who will be notified in emergencies</p>
+          </div>
+        ) : (
+          contacts.map(contact => (
+            <div key={contact.id} className="bg-card border border-border rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+              <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-primary-foreground font-black text-lg shadow-md">
+                {contact.name[0]}
               </div>
-              <p className="text-xs text-muted-foreground truncate">{contact.phone}</p>
-              <p className="text-[10px] text-muted-foreground truncate">{contact.email}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {!contact.isVerified && contact.id !== '1' && (
-                <button 
-                  onClick={() => simulateResend(contact.id)}
-                  disabled={verifyingId === contact.id}
-                  className="p-2 text-muted-foreground hover:text-info transition-colors disabled:animate-spin"
-                >
-                  <RefreshCw className="w-5 h-5" />
-                </button>
-              )}
-              {contact.id !== '1' && (
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-foreground truncate">{contact.name}</p>
+                  {contact.isVerified ? (
+                    <ShieldCheck className="w-4 h-4 text-success shrink-0" />
+                  ) : (
+                    <Shield className="w-4 h-4 text-muted-foreground shrink-0" />
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground truncate">{contact.phone}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{contact.email}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {!contact.isVerified && (
+                  <button 
+                    onClick={() => simulateResend(contact.id)}
+                    disabled={verifyingId === contact.id}
+                    className="p-2 text-muted-foreground hover:text-info transition-colors disabled:animate-spin"
+                  >
+                    <RefreshCw className="w-5 h-5" />
+                  </button>
+                )}
                 <button 
                   onClick={() => removeContact(contact.id)}
                   className="p-2 text-muted-foreground hover:text-emergency transition-colors"
                 >
                   <Trash2 className="w-5 h-5" />
                 </button>
-              )}
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Pending Verifications */}
