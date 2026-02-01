@@ -21,6 +21,7 @@ export interface LocationSharingState {
   isActive: boolean;
   sessionId: string | null;
   sharedWithContactIds: string[];
+  shareTokens: string[];
   triggeredBy: TriggerSource | null;
   expiresAt: number | null;
 }
@@ -31,6 +32,7 @@ export const useLocationSharing = () => {
     isActive: false,
     sessionId: null,
     sharedWithContactIds: [],
+    shareTokens: [],
     triggeredBy: null,
     expiresAt: null,
   });
@@ -63,13 +65,14 @@ export const useLocationSharing = () => {
         // Resume active session
         const { data: shares } = await supabase
           .from('location_shares')
-          .select('recipient_contact_id')
+          .select('recipient_contact_id, share_token')
           .eq('live_location_id', data.id);
 
         setSharingState({
           isActive: true,
           sessionId: data.id,
           sharedWithContactIds: shares?.map(s => s.recipient_contact_id) || [],
+          shareTokens: shares?.map(s => s.share_token).filter(Boolean) as string[] || [],
           triggeredBy: data.triggered_by as TriggerSource,
           expiresAt: data.expires_at ? new Date(data.expires_at).getTime() : null,
         });
@@ -189,16 +192,20 @@ export const useLocationSharing = () => {
         recipient_contact_id: contactId,
       }));
 
-      const { error: sharesError } = await supabase
+      const { data: insertedShares, error: sharesError } = await supabase
         .from('location_shares')
-        .insert(shareRecords);
+        .insert(shareRecords)
+        .select('share_token');
 
       if (sharesError) throw sharesError;
+
+      const tokens = insertedShares?.map(s => s.share_token).filter(Boolean) as string[] || [];
 
       setSharingState({
         isActive: true,
         sessionId: session.id,
         sharedWithContactIds: contactIds,
+        shareTokens: tokens,
         triggeredBy,
         expiresAt: expiresAt ? new Date(expiresAt).getTime() : null,
       });
@@ -237,6 +244,7 @@ export const useLocationSharing = () => {
         isActive: false,
         sessionId: null,
         sharedWithContactIds: [],
+        shareTokens: [],
         triggeredBy: null,
         expiresAt: null,
       });

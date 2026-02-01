@@ -202,7 +202,7 @@ const Index = () => {
       </main>
 
       <Navigation activeMode={mode} setMode={setMode} />
-      {isSOSActive && <AlertModal onClose={() => setIsSOSActive(false)} />}
+      {isSOSActive && <AlertModal onClose={() => setIsSOSActive(false)} shareTokens={sharingState.shareTokens} />}
     </div>
   );
 };
