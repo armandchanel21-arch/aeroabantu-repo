@@ -5,6 +5,13 @@ import { toast } from 'sonner';
 
 export type TriggerSource = 'manual' | 'sos' | 'voice';
 
+interface Contact {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+}
+
 export interface LiveLocationSession {
   id: string;
   latitude: number;
@@ -144,7 +151,8 @@ export const useLocationSharing = () => {
   const startSharing = useCallback(async (
     contactIds: string[],
     triggeredBy: TriggerSource = 'manual',
-    durationMinutes: number | null = null
+    durationMinutes: number | null = null,
+    contactsData?: Contact[]
   ) => {
     if (!user) {
       toast.error('Please sign in to share your location');
@@ -211,6 +219,36 @@ export const useLocationSharing = () => {
       });
 
       startLocationUpdates(session.id);
+
+      // Send notifications to contacts
+      if (contactsData && contactsData.length > 0 && tokens.length > 0) {
+        try {
+          const notificationPayload = {
+            contacts: contactsData.map(c => ({
+              name: c.name,
+              email: c.email,
+              phone: c.phone,
+            })),
+            shareTokens: tokens,
+            sharerName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Someone',
+            triggeredBy,
+          };
+
+          const { error: notifError } = await supabase.functions.invoke('send-sos-notification', {
+            body: notificationPayload,
+          });
+
+          if (notifError) {
+            console.error('Failed to send notifications:', notifError);
+            toast.warning('Location shared but notifications may not have been sent');
+          } else {
+            const notifType = triggeredBy === 'sos' ? 'SOS alerts' : 'notifications';
+            toast.success(`${notifType} sent to ${contactsData.length} contact(s)`);
+          }
+        } catch (notifError) {
+          console.error('Notification error:', notifError);
+        }
+      }
 
       const triggerLabel = triggeredBy === 'sos' ? 'SOS Alert' : triggeredBy === 'voice' ? 'Voice Command' : 'Live Location';
       toast.success(`${triggerLabel} sharing started with ${contactIds.length} contact(s)`);

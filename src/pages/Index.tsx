@@ -68,7 +68,13 @@ const Index = () => {
       await startSharing(
         emergencyContacts.map(c => c.id),
         'sos',
-        60 // 1 hour duration for SOS
+        60, // 1 hour duration for SOS
+        emergencyContacts.map(c => ({
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+        }))
       );
     }
     
@@ -77,7 +83,6 @@ const Index = () => {
     }
   }, [contacts, startSharing]);
 
-  // Trigger location sharing via voice command
   const triggerVoiceSharing = useCallback(async () => {
     const emergencyContacts = contacts.filter(c => c.isEmergency && c.isVerified);
     
@@ -85,7 +90,13 @@ const Index = () => {
       await startSharing(
         emergencyContacts.map(c => c.id),
         'voice',
-        60 // 1 hour duration
+        60, // 1 hour duration
+        emergencyContacts.map(c => ({
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+        }))
       );
     }
   }, [contacts, startSharing]);
