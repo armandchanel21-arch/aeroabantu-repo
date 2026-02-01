@@ -1,26 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AppMode, Contact, User, LiveSharingState } from '@/types/aero';
+import { AppMode, Contact, LiveSharingState } from '@/types/aero';
 import MapView from '@/components/aero/MapView';
 import SOSButton from '@/components/aero/SOSButton';
 import ContactsList from '@/components/aero/ContactsList';
 import AISettings from '@/components/aero/AISettings';
-import Auth from '@/components/aero/Auth';
+import AuthForm from '@/components/aero/AuthForm';
 import Navigation from '@/components/aero/Navigation';
 import AlertModal from '@/components/aero/AlertModal';
 import Profile from '@/components/aero/Profile';
 import AeroIcon from '@/components/aero/AeroIcon';
+import { useAuth } from '@/hooks/useAuth';
 import { Sun, Moon } from 'lucide-react';
 
 const Index = () => {
-  const [mode, setMode] = useState<AppMode>(AppMode.AUTH);
+  const { user, loading, signOut } = useAuth();
+  const [mode, setMode] = useState<AppMode>(AppMode.MAP);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('aero-theme');
     return saved === 'dark';
-  });
-
-  const [user, setUser] = useState<User | null>(() => {
-    const savedUser = localStorage.getItem('aero-user');
-    return savedUser ? JSON.parse(savedUser) : null;
   });
 
   const [contacts, setContacts] = useState<Contact[]>(() => {
@@ -48,14 +45,6 @@ const Index = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
-
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem('aero-user', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('aero-user');
-    }
-  }, [user]);
 
   useEffect(() => {
     localStorage.setItem('aero-contacts', JSON.stringify(contacts));
@@ -139,23 +128,32 @@ const Index = () => {
     }
   }, [contacts]);
 
-  const handleLogin = (userData: User) => {
-    setUser(userData);
-    setMode(AppMode.MAP);
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-    setMode(AppMode.AUTH);
-  };
-
-  if (mode === AppMode.AUTH && !user) {
-    return <Auth onLogin={handleLogin} />;
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="bg-primary p-4 rounded-2xl">
+            <AeroIcon className="w-12 h-12 text-primary-foreground animate-pulse" />
+          </div>
+          <p className="text-muted-foreground text-sm">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
-  if (mode === AppMode.AUTH && user) {
-    setMode(AppMode.MAP);
+  // Show auth form if not authenticated
+  if (!user) {
+    return <AuthForm onAuthSuccess={() => {}} />;
   }
+
+  // Create user object for components that need it
+  const appUser = {
+    id: user.id,
+    name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+    email: user.email || '',
+    phone: user.user_metadata?.phone || '',
+  };
 
   return (
     <div className={`flex flex-col h-screen relative overflow-hidden bg-background transition-colors duration-300`}>
@@ -221,7 +219,7 @@ const Index = () => {
               isListening={isAIListening} 
               setIsListening={setIsAIListening} 
               onSOSDetected={triggerSOS} 
-              user={user}
+              user={appUser}
             />
           </div>
         )}
@@ -229,9 +227,8 @@ const Index = () => {
         {mode === AppMode.PROFILE && (
           <div className="h-full overflow-y-auto bg-background p-4 pb-32 transition-colors">
             <Profile 
-              user={user} 
-              setUser={setUser} 
-              onLogout={handleLogout} 
+              user={appUser} 
+              onLogout={signOut} 
             />
           </div>
         )}
