@@ -1,28 +1,56 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '@/types/aero';
 import { Mail, Phone, LogOut } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface ProfileProps {
   user: User | null;
-  setUser: React.Dispatch<React.SetStateAction<User | null>>;
   onLogout: () => void;
 }
 
-const Profile: React.FC<ProfileProps> = ({ user, setUser, onLogout }) => {
+const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState(user?.name || '');
-  const [editEmail, setEditEmail] = useState(user?.email || '');
-  const [editPhone, setEditPhone] = useState(user?.phone || '');
+  const [loading, setLoading] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const { toast } = useToast();
 
-  const handleSave = () => {
+  useEffect(() => {
     if (user) {
-      setUser({
-        ...user,
-        name: editName,
-        email: editEmail,
-        phone: editPhone
+      setEditName(user.name || '');
+      setEditPhone(user.phone || '');
+    }
+  }, [user]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          display_name: editName,
+          phone: editPhone,
+        })
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Profile updated",
+        description: "Your changes have been saved.",
       });
       setIsEditing(false);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -45,10 +73,10 @@ const Profile: React.FC<ProfileProps> = ({ user, setUser, onLogout }) => {
       <div className="bg-card border border-border rounded-3xl p-6 shadow-sm space-y-6">
         <div className="flex flex-col items-center space-y-4">
           <div className="w-24 h-24 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-3xl font-black shadow-xl">
-            {user.name[0]}
+            {user.name?.[0] || 'U'}
           </div>
           <div className="text-center">
-            <h3 className="text-xl font-bold text-foreground">{user.name}</h3>
+            <h3 className="text-xl font-bold text-foreground">{user.name || 'User'}</h3>
             <p className="text-xs text-muted-foreground uppercase tracking-widest font-black">Verified Responder</p>
           </div>
         </div>
@@ -57,19 +85,10 @@ const Profile: React.FC<ProfileProps> = ({ user, setUser, onLogout }) => {
           {isEditing ? (
             <>
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-muted-foreground px-1">Full Name</label>
+                <label className="text-[10px] font-black uppercase text-muted-foreground px-1">Display Name</label>
                 <input 
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full bg-secondary border border-border rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-emergency outline-none text-foreground transition-all"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-muted-foreground px-1">Email Address</label>
-                <input 
-                  type="email"
-                  value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
                   className="w-full bg-secondary border border-border rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-emergency outline-none text-foreground transition-all"
                 />
               </div>
@@ -85,9 +104,10 @@ const Profile: React.FC<ProfileProps> = ({ user, setUser, onLogout }) => {
               <div className="flex gap-2 pt-2">
                 <button 
                   onClick={handleSave}
-                  className="flex-1 bg-emergency text-emergency-foreground font-bold py-3 rounded-2xl shadow-lg"
+                  disabled={loading}
+                  className="flex-1 bg-emergency text-emergency-foreground font-bold py-3 rounded-2xl shadow-lg disabled:opacity-50"
                 >
-                  Save Changes
+                  {loading ? 'Saving...' : 'Save Changes'}
                 </button>
                 <button 
                   onClick={() => setIsEditing(false)}
