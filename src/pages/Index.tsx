@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AppMode, Contact, LiveSharingState } from '@/types/aero';
+import { AppMode, LiveSharingState } from '@/types/aero';
 import MapView from '@/components/aero/MapView';
 import SOSButton from '@/components/aero/SOSButton';
 import ContactsList from '@/components/aero/ContactsList';
@@ -10,21 +10,16 @@ import AlertModal from '@/components/aero/AlertModal';
 import Profile from '@/components/aero/Profile';
 import AeroIcon from '@/components/aero/AeroIcon';
 import { useAuth } from '@/hooks/useAuth';
+import { useContacts } from '@/hooks/useContacts';
 import { Sun, Moon } from 'lucide-react';
 
 const Index = () => {
   const { user, loading, signOut } = useAuth();
+  const { contacts, loading: contactsLoading, addContact, updateContact, deleteContact } = useContacts();
   const [mode, setMode] = useState<AppMode>(AppMode.MAP);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('aero-theme');
     return saved === 'dark';
-  });
-
-  const [contacts, setContacts] = useState<Contact[]>(() => {
-    const savedContacts = localStorage.getItem('aero-contacts');
-    return savedContacts ? JSON.parse(savedContacts) : [
-      { id: '1', name: 'Emergency Dispatch', phone: '911', email: 'sos@aeroabantu.com', isEmergency: true, isVerified: true }
-    ];
   });
 
   const [sharingState, setSharingState] = useState<LiveSharingState>({
@@ -46,47 +41,6 @@ const Index = () => {
     }
   }, [isDarkMode]);
 
-  useEffect(() => {
-    localStorage.setItem('aero-contacts', JSON.stringify(contacts));
-  }, [contacts]);
-
-  // Simulate moving contacts around if they are "live"
-  useEffect(() => {
-    if (!location) return;
-
-    // Initially place contacts near the user if they don't have a location
-    setContacts(prev => prev.map(c => {
-      if (!c.lastKnownLocation && c.isVerified && c.id !== '1') {
-        return {
-          ...c,
-          lastKnownLocation: {
-            lat: location.lat + (Math.random() - 0.5) * 0.01,
-            lng: location.lng + (Math.random() - 0.5) * 0.01,
-            timestamp: Date.now()
-          }
-        };
-      }
-      return c;
-    }));
-
-    const interval = setInterval(() => {
-      setContacts(prev => prev.map(c => {
-        if (c.lastKnownLocation && c.isVerified && c.id !== '1') {
-          return {
-            ...c,
-            lastKnownLocation: {
-              lat: c.lastKnownLocation.lat + (Math.random() - 0.5) * 0.0005,
-              lng: c.lastKnownLocation.lng + (Math.random() - 0.5) * 0.0005,
-              timestamp: Date.now()
-            }
-          };
-        }
-        return c;
-      }));
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [location === null]);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -209,7 +163,13 @@ const Index = () => {
 
         {mode === AppMode.CONTACTS && (
           <div className="h-full overflow-y-auto bg-background p-4 pb-32 transition-colors">
-            <ContactsList contacts={contacts} setContacts={setContacts} />
+            <ContactsList 
+              contacts={contacts} 
+              onAddContact={addContact}
+              onUpdateContact={updateContact}
+              onDeleteContact={deleteContact}
+              loading={contactsLoading}
+            />
           </div>
         )}
 
