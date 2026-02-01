@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import AeroIcon from './AeroIcon';
 import { Separator } from '@/components/ui/separator';
+import ForgotPasswordForm from './ForgotPasswordForm';
 
 interface AuthFormProps {
   onAuthSuccess: () => void;
@@ -13,6 +14,7 @@ interface AuthFormProps {
 
 const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -20,6 +22,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
   const { toast } = useToast();
+
+  if (showForgotPassword) {
+    return <ForgotPasswordForm onBack={() => setShowForgotPassword(false)} />;
+  }
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
@@ -199,6 +205,16 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
               />
             )}
           </div>
+
+          {isLogin && (
+            <button
+              type="button"
+              onClick={() => setShowForgotPassword(true)}
+              className="text-sm text-emergency hover:text-emergency/80 transition-colors text-right w-full"
+            >
+              Forgot password?
+            </button>
+          )}
 
           <Button
             type="submit"
