@@ -59,7 +59,7 @@ const handler = async (req: Request): Promise<Response> => {
                            '📍 Location Sharing';
 
           const emailResponse = await resend.emails.send({
-            from: "AeroAbantu Alerts <alerts@updates.aeroabantu.com>",
+            from: "AeroAbantu Alerts <onboarding@resend.dev>",
             to: [contact.email],
             subject: `${alertType} from ${sharerName}`,
             html: `
