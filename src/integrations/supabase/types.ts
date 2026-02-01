@@ -50,6 +50,84 @@ export type Database = {
         }
         Relationships: []
       }
+      live_locations: {
+        Row: {
+          accuracy: number | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          latitude: number
+          longitude: number
+          triggered_by: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accuracy?: number | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          latitude: number
+          longitude: number
+          triggered_by?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accuracy?: number | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          latitude?: number
+          longitude?: number
+          triggered_by?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      location_shares: {
+        Row: {
+          created_at: string
+          id: string
+          live_location_id: string
+          recipient_contact_id: string
+          sharer_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          live_location_id: string
+          recipient_contact_id: string
+          sharer_user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          live_location_id?: string
+          recipient_contact_id?: string
+          sharer_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "location_shares_live_location_id_fkey"
+            columns: ["live_location_id"]
+            isOneToOne: false
+            referencedRelation: "live_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "location_shares_recipient_contact_id_fkey"
+            columns: ["recipient_contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null

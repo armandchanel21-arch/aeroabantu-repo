@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { User, AIMessage } from '@/types/aero';
-import { Mic, GraduationCap, Info } from 'lucide-react';
+import { Mic, GraduationCap, Info, MapPin } from 'lucide-react';
 
 interface AISettingsProps {
   isListening: boolean;
   setIsListening: (value: boolean) => void;
   onSOSDetected: () => void;
+  onShareLocation: () => void;
   user: User | null;
 }
 
@@ -13,10 +14,12 @@ const AISettings: React.FC<AISettingsProps> = ({
   isListening, 
   setIsListening, 
   onSOSDetected,
+  onShareLocation,
   user 
 }) => {
   const [isTrainingMode, setIsTrainingMode] = useState(false);
   const [secretPhrase, setSecretPhrase] = useState('Help AeroAbantu');
+  const [sharePhrase, setSharePhrase] = useState('Share my location');
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const [aiMessages, setAiMessages] = useState<AIMessage[]>([]);
 
@@ -51,18 +54,31 @@ const AISettings: React.FC<AISettingsProps> = ({
     log(isTrainingMode ? "Training stopped" : "Guardian AI stopped");
   };
 
-  const simulateTrigger = () => {
+  const simulateTrigger = (type: 'sos' | 'share') => {
     if (isTrainingMode) {
-      log("Training trigger detected!");
+      log(`Training ${type === 'sos' ? 'SOS' : 'Share'} trigger detected!`);
       const newMsg: AIMessage = {
         id: Math.random().toString(36).substr(2, 9),
-        text: "Great job! Your trigger phrase was recognized. In a real emergency, this would activate the SOS system.",
+        text: type === 'sos' 
+          ? "Great job! Your SOS trigger phrase was recognized. In a real emergency, this would activate the SOS system and share your location."
+          : "Location sharing phrase recognized! In a real scenario, this would immediately share your live location with emergency contacts.",
         timestamp: Date.now()
       };
       setAiMessages(prev => [newMsg, ...prev].slice(0, 10));
     } else {
-      log("AI DETECTED EMERGENCY!");
-      onSOSDetected();
+      if (type === 'sos') {
+        log("AI DETECTED EMERGENCY!");
+        onSOSDetected();
+      } else {
+        log("AI DETECTED LOCATION SHARE REQUEST!");
+        onShareLocation();
+        const newMsg: AIMessage = {
+          id: Math.random().toString(36).substr(2, 9),
+          text: "I've started sharing your live location with your emergency contacts. They can now see where you are in real-time.",
+          timestamp: Date.now()
+        };
+        setAiMessages(prev => [newMsg, ...prev].slice(0, 10));
+      }
     }
   };
 
@@ -113,7 +129,7 @@ const AISettings: React.FC<AISettingsProps> = ({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-primary-foreground/60">Secret Trigger Phrase</label>
+            <label className="text-[10px] font-black uppercase tracking-widest text-primary-foreground/60">SOS Trigger Phrase</label>
             <input 
               value={secretPhrase}
               onChange={(e) => setSecretPhrase(e.target.value)}
@@ -122,6 +138,22 @@ const AISettings: React.FC<AISettingsProps> = ({
                 ${isTrainingMode ? 'border-training/30 focus:ring-training' : 'border-primary-foreground/20 focus:ring-info'}
               `}
               placeholder="e.g. Help AeroAbantu"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-primary-foreground/60 flex items-center gap-2">
+              <MapPin className="w-3 h-3" />
+              Location Share Phrase
+            </label>
+            <input 
+              value={sharePhrase}
+              onChange={(e) => setSharePhrase(e.target.value)}
+              disabled={isListening}
+              className={`w-full bg-black/30 border rounded-2xl px-4 py-3 text-sm focus:ring-2 outline-none disabled:opacity-50 transition-colors text-primary-foreground placeholder:text-primary-foreground/50
+                ${isTrainingMode ? 'border-training/30 focus:ring-training' : 'border-primary-foreground/20 focus:ring-info'}
+              `}
+              placeholder="e.g. Share my location"
             />
           </div>
 
@@ -146,12 +178,21 @@ const AISettings: React.FC<AISettingsProps> = ({
           </button>
 
           {isListening && (
-            <button 
-              onClick={simulateTrigger}
-              className="w-full py-3 rounded-2xl font-bold text-sm bg-primary-foreground/20 hover:bg-primary-foreground/30 transition-all"
-            >
-              Simulate Trigger Detection
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => simulateTrigger('sos')}
+                className="flex-1 py-3 rounded-2xl font-bold text-sm bg-emergency/20 hover:bg-emergency/30 transition-all"
+              >
+                Simulate SOS
+              </button>
+              <button 
+                onClick={() => simulateTrigger('share')}
+                className="flex-1 py-3 rounded-2xl font-bold text-sm bg-success/20 hover:bg-success/30 transition-all flex items-center justify-center gap-2"
+              >
+                <MapPin className="w-4 h-4" />
+                Simulate Share
+              </button>
+            </div>
           )}
         </div>
       </div>

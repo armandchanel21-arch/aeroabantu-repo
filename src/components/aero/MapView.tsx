@@ -1,25 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Contact, LiveSharingState } from '@/types/aero';
-import { Search, MapPin, Users, X, Clock, Eye } from 'lucide-react';
+import { Contact } from '@/types/aero';
+import { Search, MapPin, Users, Clock, Eye } from 'lucide-react';
+import { useLocationSharing } from '@/hooks/useLocationSharing';
 
 interface MapViewProps {
   userLocation: { lat: number; lng: number } | null;
   contacts: Contact[];
-  sharingState: LiveSharingState;
-  setSharingState: React.Dispatch<React.SetStateAction<LiveSharingState>>;
 }
 
 const MapView: React.FC<MapViewProps> = ({ 
   userLocation, 
-  contacts, 
-  sharingState, 
-  setSharingState 
+  contacts,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<{ [key: string]: L.Marker }>({});
+  
+  const { sharingState, startSharing, stopSharing, loading: sharingLoading } = useLocationSharing();
   
   const [isSharingModalOpen, setIsSharingModalOpen] = useState(false);
   const [isLiveCirclesOpen, setIsLiveCirclesOpen] = useState(false);
@@ -103,20 +102,16 @@ const MapView: React.FC<MapViewProps> = ({
     );
   };
 
-  const handleStartSharing = () => {
-    const expiresAt = sharingDuration ? Date.now() + sharingDuration * 60000 : null;
-    setSharingState({
-      isActive: true,
-      sharedWithIds: selectedContactIds,
-      expiresAt: expiresAt
-    });
-    setIsSharingModalOpen(false);
-    if (window.navigator.vibrate) window.navigator.vibrate(50);
+  const handleStartSharing = async () => {
+    const success = await startSharing(selectedContactIds, 'manual', sharingDuration);
+    if (success) {
+      setIsSharingModalOpen(false);
+      setSelectedContactIds([]);
+    }
   };
 
-  const handleStopSharing = () => {
-    setSharingState({ isActive: false, sharedWithIds: [], expiresAt: null });
-    if (window.navigator.vibrate) window.navigator.vibrate(50);
+  const handleStopSharing = async () => {
+    await stopSharing();
   };
 
   const focusOnContact = (contact: Contact) => {
@@ -218,7 +213,9 @@ const MapView: React.FC<MapViewProps> = ({
                   ))}
                 </div>
               </div>
-              <button onClick={handleStartSharing} disabled={selectedContactIds.length === 0} className="w-full bg-primary text-primary-foreground py-4 rounded-2xl font-black shadow-xl active:scale-95 transition-all disabled:opacity-50">START LIVE SHARING</button>
+              <button onClick={handleStartSharing} disabled={selectedContactIds.length === 0 || sharingLoading} className="w-full bg-primary text-primary-foreground py-4 rounded-2xl font-black shadow-xl active:scale-95 transition-all disabled:opacity-50">
+                {sharingLoading ? 'STARTING...' : 'START LIVE SHARING'}
+              </button>
             </div>
           </div>
         </div>
