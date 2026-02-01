@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AppMode, LiveSharingState } from '@/types/aero';
+import { AppMode } from '@/types/aero';
 import MapView from '@/components/aero/MapView';
 import SOSButton from '@/components/aero/SOSButton';
 import ContactsList from '@/components/aero/ContactsList';
@@ -11,21 +11,17 @@ import Profile from '@/components/aero/Profile';
 import AeroIcon from '@/components/aero/AeroIcon';
 import { useAuth } from '@/hooks/useAuth';
 import { useContacts } from '@/hooks/useContacts';
+import { useLocationSharing } from '@/hooks/useLocationSharing';
 import { Sun, Moon } from 'lucide-react';
 
 const Index = () => {
   const { user, loading, signOut } = useAuth();
   const { contacts, loading: contactsLoading, addContact, updateContact, deleteContact } = useContacts();
+  const { sharingState, startSharing } = useLocationSharing();
   const [mode, setMode] = useState<AppMode>(AppMode.MAP);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('aero-theme');
     return saved === 'dark';
-  });
-
-  const [sharingState, setSharingState] = useState<LiveSharingState>({
-    isActive: false,
-    sharedWithIds: [],
-    expiresAt: null
   });
 
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -59,28 +55,40 @@ const Index = () => {
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
-  // Check for sharing expiration
-  useEffect(() => {
-    if (!sharingState.isActive || !sharingState.expiresAt) return;
-
-    const interval = setInterval(() => {
-      if (Date.now() > (sharingState.expiresAt as number)) {
-        setSharingState({ isActive: false, sharedWithIds: [], expiresAt: null });
-        if (window.navigator.vibrate) window.navigator.vibrate(200);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [sharingState]);
-
-  const triggerSOS = useCallback(() => {
+  // Trigger SOS with automatic location sharing
+  const triggerSOS = useCallback(async () => {
     setIsSOSActive(true);
-    console.log("SOS TRIGGERED! Alerts sent to:", contacts.filter(c => c.isEmergency && c.isVerified));
+    
+    // Get emergency contacts
+    const emergencyContacts = contacts.filter(c => c.isEmergency && c.isVerified);
+    console.log("SOS TRIGGERED! Alerts sent to:", emergencyContacts);
+    
+    // Auto-start location sharing with emergency contacts
+    if (emergencyContacts.length > 0) {
+      await startSharing(
+        emergencyContacts.map(c => c.id),
+        'sos',
+        60 // 1 hour duration for SOS
+      );
+    }
     
     if (window.navigator.vibrate) {
       window.navigator.vibrate([500, 200, 500, 200, 500]);
     }
-  }, [contacts]);
+  }, [contacts, startSharing]);
+
+  // Trigger location sharing via voice command
+  const triggerVoiceSharing = useCallback(async () => {
+    const emergencyContacts = contacts.filter(c => c.isEmergency && c.isVerified);
+    
+    if (emergencyContacts.length > 0) {
+      await startSharing(
+        emergencyContacts.map(c => c.id),
+        'voice',
+        60 // 1 hour duration
+      );
+    }
+  }, [contacts, startSharing]);
 
   // Show loading state
   if (loading) {
@@ -152,8 +160,6 @@ const Index = () => {
             <MapView 
               userLocation={location} 
               contacts={contacts} 
-              sharingState={sharingState}
-              setSharingState={setSharingState}
             />
             <div className="absolute bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-20">
               <SOSButton onTrigger={triggerSOS} />
@@ -178,7 +184,8 @@ const Index = () => {
             <AISettings 
               isListening={isAIListening} 
               setIsListening={setIsAIListening} 
-              onSOSDetected={triggerSOS} 
+              onSOSDetected={triggerSOS}
+              onShareLocation={triggerVoiceSharing}
               user={appUser}
             />
           </div>
