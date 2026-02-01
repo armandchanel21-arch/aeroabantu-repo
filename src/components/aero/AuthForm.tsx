@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { lovable } from '@/integrations/lovable/index';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import AeroIcon from './AeroIcon';
+import { Separator } from '@/components/ui/separator';
 
 interface AuthFormProps {
   onAuthSuccess: () => void;
@@ -15,7 +17,26 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const { toast } = useToast();
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      const { error } = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: window.location.origin,
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      setGoogleLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,6 +109,28 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthSuccess }) => {
           <p className="text-muted-foreground font-medium text-sm">
             {isLogin ? 'Sign in to continue' : 'Create your account'}
           </p>
+        </div>
+
+        <div className="w-full max-w-sm space-y-4">
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            disabled={googleLoading}
+            className="w-full bg-card border border-border flex items-center justify-center gap-3 py-4 rounded-2xl font-bold text-foreground shadow-sm active:bg-secondary transition-all hover:border-muted-foreground/30 disabled:opacity-50"
+          >
+            {googleLoading ? (
+              <div className="w-5 h-5 border-2 border-muted-foreground/30 border-t-foreground rounded-full animate-spin" />
+            ) : (
+              <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" className="w-6 h-6" alt="Google" />
+            )}
+            Continue with Google
+          </button>
+
+          <div className="flex items-center gap-3">
+            <Separator className="flex-1" />
+            <span className="text-xs text-muted-foreground font-medium">or</span>
+            <Separator className="flex-1" />
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
