@@ -95,6 +95,7 @@ export type Database = {
           id: string
           live_location_id: string
           recipient_contact_id: string
+          share_token: string | null
           sharer_user_id: string
         }
         Insert: {
@@ -102,6 +103,7 @@ export type Database = {
           id?: string
           live_location_id: string
           recipient_contact_id: string
+          share_token?: string | null
           sharer_user_id: string
         }
         Update: {
@@ -109,6 +111,7 @@ export type Database = {
           id?: string
           live_location_id?: string
           recipient_contact_id?: string
+          share_token?: string | null
           sharer_user_id?: string
         }
         Relationships: [
