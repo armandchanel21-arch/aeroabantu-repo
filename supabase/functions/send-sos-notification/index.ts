@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "resend";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.93.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,6 +9,7 @@ const corsHeaders = {
 };
 
 interface Contact {
+  id?: string;
   name: string;
   email?: string;
   phone?: string;
@@ -20,6 +22,21 @@ interface SOSNotificationRequest {
   triggeredBy: 'sos' | 'voice' | 'manual';
 }
 
+// Input validation helpers
+const validateEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= 255;
+};
+
+const validatePhone = (phone: string): boolean => {
+  const phoneRegex = /^[\d\s+\-()]+$/;
+  return phoneRegex.test(phone) && phone.length >= 7 && phone.length <= 20;
+};
+
+const sanitizeString = (str: string, maxLength: number = 100): string => {
+  return str.replace(/[<>\"'&]/g, '').trim().substring(0, maxLength);
+};
+
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -27,30 +44,149 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
+    // ============= AUTHENTICATION =============
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      console.error("Missing or invalid Authorization header");
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Create authenticated Supabase client
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    // Verify JWT and get user claims
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    
+    if (claimsError || !claimsData?.claims) {
+      console.error("JWT verification failed:", claimsError);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid token' }),
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    const userId = claimsData.claims.sub as string;
+    console.log(`Authenticated user: ${userId}`);
+
+    // ============= INPUT VALIDATION =============
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     if (!RESEND_API_KEY) {
       throw new Error("RESEND_API_KEY is not configured");
     }
 
+    const requestBody = await req.json();
+    const { contacts, shareTokens, sharerName, triggeredBy }: SOSNotificationRequest = requestBody;
+
+    // Validate required fields
+    if (!contacts || !Array.isArray(contacts) || contacts.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: "No contacts provided" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    if (!shareTokens || !Array.isArray(shareTokens) || shareTokens.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: "No share tokens provided" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    if (!sharerName || typeof sharerName !== 'string') {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid sharer name" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    if (!['sos', 'voice', 'manual'].includes(triggeredBy)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid trigger type" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Sanitize inputs
+    const sanitizedSharerName = sanitizeString(sharerName, 100);
+
+    // Validate contacts format
+    for (const contact of contacts) {
+      if (!contact.name || typeof contact.name !== 'string') {
+        return new Response(
+          JSON.stringify({ success: false, error: "Invalid contact name" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+      if (contact.email && !validateEmail(contact.email)) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Invalid email for contact: ${sanitizeString(contact.name)}` }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+      if (contact.phone && !validatePhone(contact.phone)) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Invalid phone for contact: ${sanitizeString(contact.name)}` }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+    }
+
+    // ============= AUTHORIZATION: Verify share ownership =============
+    const { data: validShares, error: sharesError } = await supabase
+      .from('location_shares')
+      .select('share_token, sharer_user_id')
+      .in('share_token', shareTokens)
+      .eq('sharer_user_id', userId);
+
+    if (sharesError) {
+      console.error("Error verifying shares:", sharesError);
+      return new Response(
+        JSON.stringify({ success: false, error: "Failed to verify shares" }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    if (!validShares || validShares.length === 0) {
+      console.error(`User ${userId} attempted to use unauthorized share tokens`);
+      return new Response(
+        JSON.stringify({ success: false, error: "Unauthorized: Invalid share tokens" }),
+        { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Build a map of valid tokens
+    const validTokenSet = new Set(validShares.map(s => s.share_token));
+    const authorizedTokens = shareTokens.filter(t => validTokenSet.has(t));
+
+    if (authorizedTokens.length === 0) {
+      console.error(`User ${userId} has no valid share tokens`);
+      return new Response(
+        JSON.stringify({ success: false, error: "No valid share tokens found" }),
+        { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    console.log(`Verified ${authorizedTokens.length} share tokens for user ${userId}`);
+
+    // ============= SEND NOTIFICATIONS =============
     const resend = new Resend(RESEND_API_KEY);
-    const { contacts, shareTokens, sharerName, triggeredBy }: SOSNotificationRequest = await req.json();
-
-    if (!contacts || contacts.length === 0) {
-      throw new Error("No contacts provided");
-    }
-
-    if (!shareTokens || shareTokens.length === 0) {
-      throw new Error("No share tokens provided");
-    }
-
     const baseUrl = req.headers.get("origin") || "https://aeroabantu.lovable.app";
     const results: { email?: string; success: boolean; error?: string }[] = [];
 
     // Send email notifications to each contact
     for (let i = 0; i < contacts.length; i++) {
       const contact = contacts[i];
-      const token = shareTokens[i] || shareTokens[0];
+      const token = authorizedTokens[i % authorizedTokens.length];
       const trackingLink = `${baseUrl}/track/${token}`;
+      const sanitizedContactName = sanitizeString(contact.name, 100);
 
       if (contact.email) {
         try {
@@ -61,7 +197,7 @@ const handler = async (req: Request): Promise<Response> => {
           const emailResponse = await resend.emails.send({
             from: "AeroAbantu Alerts <onboarding@resend.dev>",
             to: [contact.email],
-            subject: `${alertType} from ${sharerName}`,
+            subject: `${alertType} from ${sanitizedSharerName}`,
             html: `
               <!DOCTYPE html>
               <html>
@@ -82,11 +218,11 @@ const handler = async (req: Request): Promise<Response> => {
                   <!-- Content -->
                   <div style="padding: 32px;">
                     <p style="color: #374151; font-size: 18px; margin: 0 0 16px 0;">
-                      Hi ${contact.name},
+                      Hi ${sanitizedContactName},
                     </p>
                     
                     <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
-                      <strong>${sharerName}</strong> has ${triggeredBy === 'sos' ? 'triggered an emergency SOS alert' : 'shared their live location with you'}. 
+                      <strong>${sanitizedSharerName}</strong> has ${triggeredBy === 'sos' ? 'triggered an emergency SOS alert' : 'shared their live location with you'}. 
                       ${triggeredBy === 'sos' ? 'They may need immediate assistance.' : ''}
                     </p>
                     
@@ -136,14 +272,14 @@ const handler = async (req: Request): Promise<Response> => {
           results.push({ 
             email: contact.email, 
             success: false, 
-            error: emailError instanceof Error ? emailError.message : "Unknown error" 
+            error: "Email delivery failed" 
           });
         }
       }
     }
 
     const successCount = results.filter(r => r.success).length;
-    console.log(`SOS notifications sent: ${successCount}/${results.length}`);
+    console.log(`SOS notifications sent by user ${userId}: ${successCount}/${results.length}`);
 
     return new Response(
       JSON.stringify({ 
@@ -162,7 +298,7 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error instanceof Error ? error.message : "Unknown error" 
+        error: "An error occurred processing your request" 
       }),
       {
         status: 500,

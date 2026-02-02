@@ -37,9 +37,11 @@ const ContactsList: React.FC<ContactsListProps> = ({
   const { toast } = useToast();
 
   const generateVerificationEmail = (contact: Contact) => {
-    const token = Math.random().toString(36).substr(2, 12).toUpperCase();
+    // Note: This is a UI simulation for demonstration only.
+    // Real verification tokens would be generated server-side using crypto-secure methods
+    const token = crypto.randomUUID().replace(/-/g, '').substring(0, 12).toUpperCase();
     const newMail: VerificationEmail = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       contactId: contact.id,
       recipientName: contact.name,
       recipientEmail: contact.email,

@@ -39,7 +39,7 @@ const AISettings: React.FC<AISettingsProps> = ({
       if (isTrainingMode) {
         setTimeout(() => {
           const newMsg: AIMessage = {
-            id: Math.random().toString(36).substr(2, 9),
+            id: crypto.randomUUID(),
             text: "Training session active. Try saying your trigger phrase clearly.",
             timestamp: Date.now()
           };
@@ -58,7 +58,7 @@ const AISettings: React.FC<AISettingsProps> = ({
     if (isTrainingMode) {
       log(`Training ${type === 'sos' ? 'SOS' : 'Share'} trigger detected!`);
       const newMsg: AIMessage = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: crypto.randomUUID(),
         text: type === 'sos' 
           ? "Great job! Your SOS trigger phrase was recognized. In a real emergency, this would activate the SOS system and share your location."
           : "Location sharing phrase recognized! In a real scenario, this would immediately share your live location with emergency contacts.",
@@ -73,7 +73,7 @@ const AISettings: React.FC<AISettingsProps> = ({
         log("AI DETECTED LOCATION SHARE REQUEST!");
         onShareLocation();
         const newMsg: AIMessage = {
-          id: Math.random().toString(36).substr(2, 9),
+          id: crypto.randomUUID(),
           text: "I've started sharing your live location with your emergency contacts. They can now see where you are in real-time.",
           timestamp: Date.now()
         };
