@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Resend } from "resend";
+import { Resend } from "npm:resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.93.3";
 
 const corsHeaders = {
@@ -29,12 +29,117 @@ const validateEmail = (email: string): boolean => {
 };
 
 const validatePhone = (phone: string): boolean => {
+  // Allow digits, spaces, plus, dashes, parentheses
   const phoneRegex = /^[\d\s+\-()]+$/;
   return phoneRegex.test(phone) && phone.length >= 7 && phone.length <= 20;
 };
 
 const sanitizeString = (str: string, maxLength: number = 100): string => {
   return str.replace(/[<>\"'&]/g, '').trim().substring(0, maxLength);
+};
+
+// Format phone number to WhatsApp format (E.164 without +)
+const formatPhoneForWhatsApp = (phone: string): string => {
+  // Remove all non-digit characters
+  let digits = phone.replace(/\D/g, '');
+  
+  // If starts with 0, assume South African number and replace with 27
+  if (digits.startsWith('0')) {
+    digits = '27' + digits.substring(1);
+  }
+  
+  return digits;
+};
+
+// Send WhatsApp message via Meta Cloud API
+const sendWhatsAppMessage = async (
+  phone: string,
+  sharerName: string,
+  trackingLink: string,
+  triggeredBy: string,
+  whatsappToken: string,
+  phoneNumberId: string
+): Promise<{ success: boolean; error?: string }> => {
+  const formattedPhone = formatPhoneForWhatsApp(phone);
+  
+  // Meta Cloud API endpoint
+  const url = `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`;
+  
+  // In test mode, we must use the pre-approved "hello_world" template
+  // For production with approved templates, you can use custom messages
+  const isTestMode = true; // Change to false when you have approved templates
+  
+  let body;
+  if (isTestMode) {
+    // Test mode: Use hello_world template (pre-approved by Meta)
+    body = {
+      messaging_product: "whatsapp",
+      to: formattedPhone,
+      type: "template",
+      template: {
+        name: "hello_world",
+        language: { code: "en_US" }
+      }
+    };
+  } else {
+    // Production mode: Use custom template (requires Meta approval)
+    const alertType = triggeredBy === 'sos' ? '🚨 EMERGENCY SOS' : 
+                     triggeredBy === 'voice' ? '⚠️ Voice Alert' : '📍 Location Share';
+    body = {
+      messaging_product: "whatsapp",
+      to: formattedPhone,
+      type: "template",
+      template: {
+        name: "sos_alert", // You'll need to create and get this approved
+        language: { code: "en" },
+        components: [
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: sharerName },
+              { type: "text", text: alertType }
+            ]
+          },
+          {
+            type: "button",
+            sub_type: "url",
+            index: "0",
+            parameters: [
+              { type: "text", text: trackingLink }
+            ]
+          }
+        ]
+      }
+    };
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${whatsappToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error(`WhatsApp API error for ${formattedPhone}:`, data);
+      return { 
+        success: false, 
+        error: data.error?.message || `HTTP ${response.status}` 
+      };
+    }
+
+    console.log(`WhatsApp message sent to ${formattedPhone}:`, data);
+    return { success: true };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`WhatsApp send error for ${formattedPhone}:`, error);
+    return { success: false, error: errorMessage };
+  }
 };
 
 const handler = async (req: Request): Promise<Response> => {
@@ -76,12 +181,21 @@ const handler = async (req: Request): Promise<Response> => {
     const userId = claimsData.claims.sub as string;
     console.log(`Authenticated user: ${userId}`);
 
-    // ============= INPUT VALIDATION =============
+    // ============= ENVIRONMENT VARIABLES =============
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+    const META_WHATSAPP_TOKEN = Deno.env.get("META_WHATSAPP_TOKEN");
+    const META_WHATSAPP_PHONE_ID = Deno.env.get("META_WHATSAPP_PHONE_ID");
+    
     if (!RESEND_API_KEY) {
       throw new Error("RESEND_API_KEY is not configured");
     }
 
+    const whatsappEnabled = !!(META_WHATSAPP_TOKEN && META_WHATSAPP_PHONE_ID);
+    if (!whatsappEnabled) {
+      console.log("WhatsApp not configured - will only send emails");
+    }
+
+    // ============= INPUT VALIDATION =============
     const requestBody = await req.json();
     const { contacts, shareTokens, sharerName, triggeredBy }: SOSNotificationRequest = requestBody;
 
@@ -179,15 +293,25 @@ const handler = async (req: Request): Promise<Response> => {
     // ============= SEND NOTIFICATIONS =============
     const resend = new Resend(RESEND_API_KEY);
     const baseUrl = req.headers.get("origin") || "https://aeroabantu.lovable.app";
-    const results: { email?: string; success: boolean; error?: string }[] = [];
+    
+    interface NotificationResult {
+      contact: string;
+      email?: { success: boolean; error?: string };
+      whatsapp?: { success: boolean; error?: string };
+    }
+    
+    const results: NotificationResult[] = [];
 
-    // Send email notifications to each contact
+    // Send notifications to each contact
     for (let i = 0; i < contacts.length; i++) {
       const contact = contacts[i];
       const token = authorizedTokens[i % authorizedTokens.length];
       const trackingLink = `${baseUrl}/track/${token}`;
       const sanitizedContactName = sanitizeString(contact.name, 100);
+      
+      const result: NotificationResult = { contact: sanitizedContactName };
 
+      // Send Email
       if (contact.email) {
         try {
           const alertType = triggeredBy === 'sos' ? '🚨 EMERGENCY SOS ALERT' : 
@@ -266,25 +390,42 @@ const handler = async (req: Request): Promise<Response> => {
           });
 
           console.log(`Email sent to ${contact.email}:`, emailResponse);
-          results.push({ email: contact.email, success: true });
+          result.email = { success: true };
         } catch (emailError) {
           console.error(`Failed to send email to ${contact.email}:`, emailError);
-          results.push({ 
-            email: contact.email, 
-            success: false, 
-            error: "Email delivery failed" 
-          });
+          result.email = { success: false, error: "Email delivery failed" };
         }
       }
+
+      // Send WhatsApp (if configured and contact has phone)
+      if (whatsappEnabled && contact.phone) {
+        const whatsappResult = await sendWhatsAppMessage(
+          contact.phone,
+          sanitizedSharerName,
+          trackingLink,
+          triggeredBy,
+          META_WHATSAPP_TOKEN!,
+          META_WHATSAPP_PHONE_ID!
+        );
+        result.whatsapp = whatsappResult;
+      }
+      
+      results.push(result);
     }
 
-    const successCount = results.filter(r => r.success).length;
-    console.log(`SOS notifications sent by user ${userId}: ${successCount}/${results.length}`);
+    // Count successes
+    const emailsSent = results.filter(r => r.email?.success).length;
+    const whatsappSent = results.filter(r => r.whatsapp?.success).length;
+    
+    console.log(`Notifications sent by user ${userId}: ${emailsSent} emails, ${whatsappSent} WhatsApp messages`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        sent: successCount, 
+        sent: {
+          email: emailsSent,
+          whatsapp: whatsappSent,
+        },
         total: results.length,
         results 
       }),
