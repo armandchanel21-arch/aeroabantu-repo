@@ -1,4 +1,0 @@
-project_id = "mzbkytzacmdowoabstkk"
-
-[functions.send-sos-notification]
-verify_jwt = false

@@ -1,73 +1,172 @@
-# Welcome to your Lovable project
+# New App
 
-## Project info
+A modern cross-platform mobile application built on Draftbit with React Native, Expo, and TypeScript.
 
-**URL**: https://aeroabantu.lovable.app
+## Tech Stack
 
-## How can I edit this code?
+- **React Native 0.79.6** - Cross-platform mobile framework
+- **Expo 53** - Development platform and tooling
+- **Expo Router 5** - File-based navigation
+- **TypeScript 5.8** - Type-safe development
+- **NativeWind 4** - Tailwind CSS for React Native
+- **React Native Reusables** - UI component library (shadcn/ui)
+- **Lucide Icons** - Icon system with NativeWind support
+- **Zustand** - State management
 
-There are several ways of editing your application.
+## Quick Start
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://aeroabantu.lovable.app) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+yarn install    # Install dependencies
+yarn start      # Start dev server
+yarn ios        # Run on iOS simulator
+yarn android    # Run on Android emulator
+yarn web        # Run in web browser
 ```
 
-**Edit a file directly in GitHub**
+## Project Structure
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```
+app/                    # File-based routes (Expo Router)
+├── _layout.tsx         # Root layout
+├── index.tsx           # Home screen
+└── +not-found.tsx      # 404 page
 
-**Use GitHub Codespaces**
+components/
+├── ui/                 # React Native Reusables components
+└── ThemeToggle.tsx     # Theme switcher
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+lib/
+├── icons/              # Lucide icon setup
+├── keyboard.tsx        # Keyboard utilities
+└── utils.ts            # Helper functions (cn, etc.)
 
-## What technologies are used for this project?
+assets/images/          # App icons and images
+```
 
-This project is built with:
+## Key Patterns
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+**Styling with NativeWind**
 
-## How can I deploy this project?
+```typescript
+// Use Tailwind classes directly
+<View className="flex-1 items-center justify-center p-4">
+  <Text className="text-xl font-bold text-foreground">Hello</Text>
+</View>
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+// Conditional styles with cn utility
+import { cn } from '~/lib/utils';
+<View className={cn('bg-card', isActive && 'bg-primary')} />
+```
 
-## Can I connect a custom domain to my Lovable project?
+**Icons**
 
-Yes, you can!
+```typescript
+import { Sun } from 'lucide-react-native';
+<Sun className="h-6 w-6 text-foreground" />
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+**Routing**
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```typescript
+import { Link, router } from 'expo-router';
+<Link href="/profile">Profile</Link>
+router.push('/settings');
+```
+
+**Theming**
+
+```typescript
+// Use theme classes in NativeWind
+<View className="bg-background">
+  <Text className="text-foreground">Themed content</Text>
+</View>
+
+// Toggle theme with built-in component
+import { ThemeToggle } from '~/components/ThemeToggle';
+<ThemeToggle />
+```
+
+**UI Components**
+
+```typescript
+// React Native Reusables components
+import { Button } from '~/components/ui/button';
+import { Card } from '~/components/ui/card';
+import { H1, P } from '~/components/ui/typography';
+
+<Button variant="outline"><Text>Click me</Text></Button>
+<H1>Main Heading</H1>
+```
+
+## Features
+
+- Cross-platform (iOS, Android, Web)
+- Dark/Light mode theming
+- UI component library (React Native Reusables)
+- Type-safe development with TypeScript
+- File-based routing
+- Responsive and accessible
+
+## Available Components
+
+**UI Components**: Accordion, Alert Dialog, Avatar, Badge, Button, Card, Checkbox, Collapsible, Context Menu, Dialog, Dropdown Menu, Hover Card, Input, Label, Menubar, Navigation Menu, Popover, Progress, Radio Group, Select, Separator, Skeleton, Switch, Table, Tabs, Textarea, Toggle, Tooltip
+
+**Typography**: H1, H2, H3, H4, P, Lead, Large, Small, Muted, Code, BlockQuote
+
+## Development
+
+```bash
+yarn lint       # Run ESLint
+yarn format     # Format code
+yarn typecheck  # Type check
+yarn prebuild   # Generate native code
+yarn doctor     # Run Expo doctor
+```
+
+## Dependencies
+
+### Core
+
+- React 19.0.0
+- React Native 0.79.6
+- Expo \~53.0.25
+- Expo Router \~5.1.10
+- TypeScript \~5.8.3
+
+### UI & Styling
+
+- NativeWind \~4.1.23
+- Tailwind CSS ^3.4.0
+- Lucide React Native ^0.562.0
+- React Native Reusables (@rn-primitives)
+- Class Variance Authority ^0.7.1
+- Tailwind Merge ^3.3.1
+- CLSX ^2.1.1
+
+### State & Navigation
+
+- Zustand ^5.0.10
+- @react-navigation/native ^7.0.3
+- @react-navigation/bottom-tabs ^7.2.0
+- @react-navigation/drawer ^7.1.1
+
+### Utilities
+
+- Expo Navigation Bar \~4.2.8
+- Expo Splash Screen \~0.30.10
+- Expo Font \~13.3.2
+- @expo-google-fonts/inter ^0.4.1
+
+### Dev Tools
+
+- ESLint ^8.57.0
+- Prettier ^3.2.5
+- TypeScript ESLint ^8.33.1
+
+---
+
+Built with Draftbit, Expo, and React Native
+
+---
+
+Built with ❤️ using Draftbit, Expo, and React Native
